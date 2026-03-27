@@ -5,6 +5,7 @@ const Vote = require('../models/Vote');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { logActivity } = require('../utils/activityLogger');
+const supabase = require('../config/supabase');
 
 const extractTags = (text) => {
   if (!text) return [];
@@ -147,6 +148,24 @@ exports.createComplaint = async (req, res) => {
   });
 
   await logActivity(req.user.id, 'complaint_created', 'complaint', complaint._id, { title });
+
+  // Sync to Supabase
+  try {
+    const { error: sbError } = await supabase.from('complaints').insert([
+      {
+        title: complaint.title,
+        description: complaint.description,
+        category: complaint.category,
+        status: complaint.status,
+        priority: complaint.priority,
+        image_url: complaint.image,
+        created_at: complaint.createdAt
+      }
+    ]);
+    if (sbError) console.error('Supabase Sync Error:', sbError);
+  } catch (err) {
+    console.error('Supabase Connection Error:', err);
+  }
 
   // Notify Admin Room
   io.to('admin_room').emit('new_complaint', complaint);

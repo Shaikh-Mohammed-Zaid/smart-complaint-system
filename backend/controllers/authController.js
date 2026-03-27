@@ -3,6 +3,7 @@ const User = require('../models/User');
 const { generateToken } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLogger');
 const sendEmail = require('../utils/sendEmail');
+const supabase = require('../config/supabase');
 
 const register = async (req, res) => {
   const { name, email, password, department, rollNumber, phone, role } = req.body;
@@ -23,6 +24,23 @@ const register = async (req, res) => {
   });
 
   await logActivity(user._id, 'user_registered', 'user', user._id, { role: user.role });
+
+  // Sync to Supabase
+  try {
+    const { error: sbError } = await supabase.from('profiles').insert([
+      {
+        id: crypto.randomUUID(), // Mocking UUID for now if not using SB Auth
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        department: user.department,
+        roll_number: user.rollNumber
+      }
+    ]);
+    if (sbError) console.error('Supabase Sync Error:', sbError);
+  } catch (err) {
+    console.error('Supabase Connection Error:', err);
+  }
 
   const token = generateToken(user._id);
   res.status(201).json({ success: true, token, user });

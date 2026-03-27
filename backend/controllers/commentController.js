@@ -2,6 +2,7 @@ const Comment = require('../models/Comment');
 const Complaint = require('../models/Complaint');
 const Notification = require('../models/Notification');
 const { logActivity } = require('../utils/activityLogger');
+const supabase = require('../config/supabase');
 
 const addComment = async (req, res) => {
   const { complaintId } = req.params;
@@ -25,6 +26,18 @@ const addComment = async (req, res) => {
   const populatedComment = await Comment.findById(newComment._id).populate('userId', 'name avatar role');
 
   await logActivity(req.user.id, 'comment_added', 'comment', newComment._id, { complaintId });
+
+  // Sync to Supabase
+  try {
+    await supabase.from('comments').insert([{
+      mongo_id: newComment._id.toString(),
+      comment: newComment.comment,
+      is_admin_comment: newComment.isAdminComment,
+      created_at: newComment.createdAt
+    }]);
+  } catch (err) {
+    console.error('Supabase comment sync error:', err);
+  }
 
   // Notify Complaint owner if someone else commented
   if (complaint.createdBy.toString() !== req.user.id) {
