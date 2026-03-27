@@ -1,0 +1,136 @@
+╔══════════════════════════════════════════════════════════════╗
+║   SMART COLLEGE COMPLAINT & ISSUE MANAGEMENT SYSTEM        ║
+║   Setup & Run Guide                                        ║
+╚══════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ PREREQUISITES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ 1. Node.js (v18 or above)  →  https://nodejs.org
+ 2. MongoDB (running locally on port 27017)
+    - Download: https://www.mongodb.com/try/download/community
+    - OR use MongoDB Atlas (cloud): update MONGO_URI in .env
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ STEP-BY-STEP SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ Step 1: Open terminal in the project root folder
+         d:\Zaid\smart-complaint-system
+
+ Step 2: Install ALL dependencies (root + backend + frontend)
+         npm run install-all
+
+ Step 3: Configure the backend environment
+         Open:  backend\.env
+         Make sure MONGO_URI points to your MongoDB instance:
+           MONGO_URI=mongodb://localhost:27017/smart_complaint_db
+
+ Step 4: Seed the database with demo data
+         npm run seed
+
+         This creates:
+           - 1 Admin account
+           - 6 Student accounts
+           - 10 Sample complaints with votes and comments
+
+ Step 5: Start the full application (frontend + backend together)
+         npm run dev
+
+         This single command launches:
+           - Backend  → http://localhost:5000
+           - Frontend → http://localhost:3000
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ LOGIN CREDENTIALS (after seeding)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ Admin Account:
+   Email:    admin@college.edu
+   Password: admin123
+
+ Student Account:
+   Email:    arjun@college.edu
+   Password: student123
+
+ TIP: On the Login page, use the "Test Admin" or "Test Student"
+      quick-login buttons to auto-fill credentials.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ AVAILABLE NPM SCRIPTS (run from project root)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  npm run install-all   →  Install deps for root, backend & frontend
+  npm run dev           →  Start both backend & frontend together
+  npm run seed          →  Seed database with demo data
+  npm run start         →  Start backend only (production)
+  npm run build         →  Build frontend for production
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ TECH STACK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Frontend:  React 18, Tailwind CSS, Framer Motion, GSAP, Three.js
+  Backend:   Node.js, Express.js, Socket.io
+  Database:  MongoDB with Mongoose ODM
+  Auth:      JWT (jsonwebtoken + bcryptjs)
+  Charts:    Chart.js + react-chartjs-2
+  Uploads:   Multer (stored in /backend/uploads)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Q: "Login failed" error?
+  A: Make sure MongoDB is running and you've run "npm run seed".
+
+  Q: "Proxy error: ECONNREFUSED"?
+  A: Backend isn't running. Check if port 5000 is free.
+     Restart with: npm run dev
+
+  Q: Port 3000 is already in use?
+  A: Kill the process using it, or set a different port:
+     SET PORT=3001 && npm start  (in frontend folder)
+
+  Q: Module not found errors?
+  A: Run "npm run install-all" again from the project root.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ PROJECT STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  smart-complaint-system/
+  ├── backend/
+  │   ├── config/         (DB connection)
+  │   ├── controllers/    (Business logic)
+  │   ├── middleware/      (Auth, uploads, errors)
+  │   ├── models/          (Mongoose schemas)
+  │   ├── routes/          (API endpoints)
+  │   ├── utils/           (Helpers, seed script)
+  │   ├── uploads/         (Uploaded images)
+  │   ├── server.js        (Entry point)
+  │   └── .env             (Environment config)
+  ├── frontend/
+  │   ├── src/
+  │   │   ├── components/  (Reusable UI components)
+  │   │   ├── context/     (Auth, Socket, Notification)
+  │   │   ├── hooks/       (GSAP, Three.js, Trending)
+  │   │   ├── pages/       (Public, Student, Admin)
+  │   │   ├── utils/       (API, animations, helpers)
+  │   │   ├── App.js       (Router & providers)
+  │   │   └── index.css    (Tailwind + custom styles)
+  │   └── tailwind.config.js
+  └── package.json         (Root scripts with concurrently)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ QUICK START (TL;DR)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. npm run install-all
+  2. npm run seed
+  3. npm run dev
+  4. Open http://localhost:3000
+  5. Login with admin@college.edu / admin123
+
+  That's it! Enjoy the cinematic experience. 🚀
