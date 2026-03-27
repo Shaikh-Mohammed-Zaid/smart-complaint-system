@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   mongo_id TEXT,
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
+  password_hash TEXT,
   role TEXT DEFAULT 'student' CHECK (role IN ('student', 'admin')),
   department TEXT DEFAULT '',
   roll_number TEXT DEFAULT '',
@@ -16,6 +17,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   avatar TEXT DEFAULT '',
   is_active BOOLEAN DEFAULT TRUE,
   last_login TIMESTAMP WITH TIME ZONE,
+  reset_password_token TEXT,
+  reset_password_expire TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

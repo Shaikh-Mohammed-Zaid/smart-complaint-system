@@ -7,7 +7,6 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const path = require('path');
-const connectDB = require('./config/db');
 const errorHandler = require('./middleware/errorHandler');
 
 // Route imports
@@ -35,15 +34,10 @@ const io = require('socket.io')(server, {
 // Make io accessible to controllers
 app.set('io', io);
 
-// Connect Database
-connectDB();
-
 // Global Middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' }
-}));
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:3000',
   credentials: true
@@ -57,7 +51,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Rate Limiting
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 200,
   message: 'Too many requests from this IP, please try again in 15 minutes',
   standardHeaders: true,
@@ -73,16 +67,10 @@ io.on('connection', (socket) => {
 
   socket.on('join', (userId) => {
     socket.join(`user_${userId}`);
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`Socket ${socket.id} joined user_${userId}`);
-    }
   });
 
   socket.on('join_admin', () => {
     socket.join('admin_room');
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`Socket ${socket.id} joined admin_room`);
-    }
   });
 
   socket.on('join_complaint', (complaintId) => {
@@ -106,6 +94,11 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/activity', activityRoutes);
 
+// Health check
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'OK', database: 'Supabase (PostgreSQL)', timestamp: new Date().toISOString() });
+});
+
 // 404 handler
 app.use((req, res, next) => {
   res.status(404).json({ success: false, message: 'Resource not found' });
@@ -118,4 +111,5 @@ const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+  console.log(`🗄️  Database: Supabase (PostgreSQL) — ${process.env.SUPABASE_URL}`);
 });

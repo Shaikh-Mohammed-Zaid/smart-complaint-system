@@ -1,0 +1,1 @@
+echo "# Build output" >> frontend/.gitignore

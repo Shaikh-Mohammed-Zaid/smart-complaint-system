@@ -1,91 +1,63 @@
-const Comment = require('../models/Comment');
-const Complaint = require('../models/Complaint');
-const Notification = require('../models/Notification');
-const { logActivity } = require('../utils/activityLogger');
 const supabase = require('../config/supabase');
+const { logActivity } = require('../utils/activityLogger');
 
 const addComment = async (req, res) => {
   const { complaintId } = req.params;
   const { comment } = req.body;
   const io = req.app.get('io');
 
-  const complaint = await Complaint.findById(complaintId);
-  if (!complaint) {
-    return res.status(404).json({ success: false, message: 'Complaint not found' });
-  }
+  const { data: complaint } = await supabase.from('complaints').select('id, created_by, title').eq('id', complaintId).single();
+  if (!complaint) return res.status(404).json({ success: false, message: 'Complaint not found' });
 
   const isAdmin = req.user.role === 'admin';
 
-  const newComment = await Comment.create({
-    complaintId,
-    userId: req.user.id,
-    comment,
-    isAdminComment: isAdmin
-  });
+  const { data: newComment, error } = await supabase
+    .from('comments')
+    .insert([{ complaint_id: complaintId, user_id: req.user.id, comment, is_admin_comment: isAdmin }])
+    .select('*, profiles:user_id(name, avatar, role)')
+    .single();
 
-  const populatedComment = await Comment.findById(newComment._id).populate('userId', 'name avatar role');
+  if (error) return res.status(500).json({ success: false, message: error.message });
 
-  await logActivity(req.user.id, 'comment_added', 'comment', newComment._id, { complaintId });
+  await logActivity(req.user.id, 'comment_added', 'comment', newComment.id, { complaintId });
 
-  // Sync to Supabase
-  try {
-    await supabase.from('comments').insert([{
-      mongo_id: newComment._id.toString(),
-      comment: newComment.comment,
-      is_admin_comment: newComment.isAdminComment,
-      created_at: newComment.createdAt
-    }]);
-  } catch (err) {
-    console.error('Supabase comment sync error:', err);
-  }
-
-  // Notify Complaint owner if someone else commented
-  if (complaint.createdBy.toString() !== req.user.id) {
-    await Notification.create({
-      userId: complaint.createdBy,
+  if (complaint.created_by !== req.user.id) {
+    await supabase.from('notifications').insert([{
+      user_id: complaint.created_by,
       type: 'new_comment',
       title: 'New Comment',
       message: `${req.user.name} commented on your complaint.`,
-      complaintId
-    });
-    io.to(`user_${complaint.createdBy}`).emit('notification');
+      complaint_id: complaintId
+    }]);
+    io.to(`user_${complaint.created_by}`).emit('notification');
   }
 
-  // Real-time emit to anyone looking at this complaint
-  io.to(`complaint_${complaintId}`).emit('new_comment', populatedComment);
-
-  res.status(201).json({ success: true, data: populatedComment });
+  io.to(`complaint_${complaintId}`).emit('new_comment', newComment);
+  res.status(201).json({ success: true, data: newComment });
 };
 
 const getComments = async (req, res) => {
   const { complaintId } = req.params;
-  const comments = await Comment.find({ complaintId })
-    .populate('userId', 'name role avatar')
-    .sort({ createdAt: 1 });
+  const { data: comments } = await supabase
+    .from('comments')
+    .select('*, profiles:user_id(name, role, avatar)')
+    .eq('complaint_id', complaintId)
+    .order('created_at', { ascending: true });
 
-  res.status(200).json({ success: true, count: comments.length, data: comments });
+  res.status(200).json({ success: true, count: (comments || []).length, data: comments || [] });
 };
 
 const deleteComment = async (req, res) => {
-  const comment = await Comment.findById(req.params.id);
+  const { data: comment } = await supabase.from('comments').select('*').eq('id', req.params.id).single();
+  if (!comment) return res.status(404).json({ success: false, message: 'Comment not found' });
 
-  if (!comment) {
-    return res.status(404).json({ success: false, message: 'Comment not found' });
-  }
-
-  // Admin or Owner
-  if (comment.userId.toString() !== req.user.id && req.user.role !== 'admin') {
+  if (comment.user_id !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({ success: false, message: 'Not authorized to delete this comment' });
   }
 
-  await comment.deleteOne();
-  await logActivity(req.user.id, 'comment_deleted', 'comment', comment._id);
-
+  await supabase.from('comments').delete().eq('id', req.params.id);
+  await logActivity(req.user.id, 'comment_deleted', 'comment', comment.id);
   res.status(200).json({ success: true, data: {} });
 };
 
-module.exports = {
-  addComment,
-  getComments,
-  deleteComment
-};
+module.exports = { addComment, getComments, deleteComment };

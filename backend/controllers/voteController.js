@@ -1,6 +1,4 @@
-const Vote = require('../models/Vote');
-const Complaint = require('../models/Complaint');
-const Notification = require('../models/Notification');
+const supabase = require('../config/supabase');
 const { logActivity } = require('../utils/activityLogger');
 
 const toggleVote = async (req, res) => {
@@ -8,89 +6,59 @@ const toggleVote = async (req, res) => {
   const userId = req.user.id;
   const io = req.app.get('io');
 
-  const complaint = await Complaint.findById(complaintId);
-  if (!complaint) {
-    return res.status(404).json({ success: false, message: 'Complaint not found' });
-  }
+  const { data: complaint } = await supabase.from('complaints').select('*').eq('id', complaintId).single();
+  if (!complaint) return res.status(404).json({ success: false, message: 'Complaint not found' });
 
-  if (complaint.createdBy.toString() === userId) {
+  if (complaint.created_by === userId) {
     return res.status(400).json({ success: false, message: 'Cannot vote for your own complaint' });
   }
 
-  // Find existing vote
-  const existingVote = await Vote.findOne({ userId, complaintId });
+  const { data: existingVote } = await supabase.from('votes').select('id').eq('user_id', userId).eq('complaint_id', complaintId).single();
 
   let votesChange = 0;
   let hasVoted = false;
 
   if (existingVote) {
-    await Vote.findByIdAndDelete(existingVote._id);
+    await supabase.from('votes').delete().eq('id', existingVote.id);
     votesChange = -1;
     await logActivity(userId, 'vote_removed', 'vote', complaintId);
   } else {
-    await Vote.create({ userId, complaintId });
+    await supabase.from('votes').insert([{ user_id: userId, complaint_id: complaintId }]);
     votesChange = 1;
     hasVoted = true;
     await logActivity(userId, 'vote_added', 'vote', complaintId);
   }
 
-  // Atomic update for complaint votes
-  const updatedComplaint = await Complaint.findByIdAndUpdate(
-    complaintId,
-    { $inc: { votes: votesChange } },
-    { new: true }
-  );
-
-  // Recalculate trendingScore: votes * (1 / (hoursOld + 2)^1.5)
-  const hoursOld = (Date.now() - updatedComplaint.createdAt.getTime()) / (1000 * 60 * 60);
+  const newVotes = (complaint.votes || 0) + votesChange;
+  const hoursOld = (Date.now() - new Date(complaint.created_at).getTime()) / (1000 * 60 * 60);
   const timeFactor = 1 / Math.pow(Math.max(0, hoursOld) + 2, 1.5);
-  updatedComplaint.trendingScore = Math.max(0, updatedComplaint.votes * timeFactor);
-  await updatedComplaint.save();
+  const trendingScore = Math.max(0, newVotes * timeFactor);
 
-  // Threshold notifications
+  await supabase.from('complaints').update({ votes: newVotes, trending_score: trendingScore }).eq('id', complaintId);
+
   const milestones = [10, 25, 50, 100];
-  if (milestones.includes(updatedComplaint.votes) && votesChange > 0) {
-    // Notify complaint owner
-    if (updatedComplaint.createdBy.toString() !== userId) {
-      await Notification.create({
-        userId: updatedComplaint.createdBy,
-        type: 'vote_milestone',
-        title: 'Popular Complaint!',
-        message: `Your complaint "${updatedComplaint.title}" just reached ${updatedComplaint.votes} votes.`,
-        complaintId: updatedComplaint._id
-      });
-      // Ping the user
-      io.to(`user_${updatedComplaint.createdBy}`).emit('notification');
-    }
+  if (milestones.includes(newVotes) && votesChange > 0 && complaint.created_by !== userId) {
+    await supabase.from('notifications').insert([{
+      user_id: complaint.created_by,
+      type: 'vote_milestone',
+      title: 'Popular Complaint!',
+      message: `Your complaint "${complaint.title}" just reached ${newVotes} votes.`,
+      complaint_id: complaintId
+    }]);
+    io.to(`user_${complaint.created_by}`).emit('notification');
   }
 
-  // Real-time vote update event
-  io.emit('vote_update', {
-    complaintId,
-    votes: updatedComplaint.votes,
-    hasVoted
-  });
-
-  res.status(200).json({
-    success: true,
-    votes: updatedComplaint.votes,
-    hasVoted
-  });
+  io.emit('vote_update', { complaintId, votes: newVotes, hasVoted });
+  res.status(200).json({ success: true, votes: newVotes, hasVoted });
 };
 
 const getVoteStatus = async (req, res) => {
   const { complaintId } = req.params;
-  
-  const complaint = await Complaint.findById(complaintId);
+  const { data: complaint } = await supabase.from('complaints').select('votes').eq('id', complaintId).single();
   if (!complaint) return res.status(404).json({ success: false, message: 'Complaint not found' });
 
-  const vote = await Vote.findOne({ userId: req.user.id, complaintId });
-
-  res.status(200).json({
-    success: true,
-    votes: complaint.votes,
-    hasVoted: !!vote
-  });
+  const { data: vote } = await supabase.from('votes').select('id').eq('user_id', req.user.id).eq('complaint_id', complaintId).single();
+  res.status(200).json({ success: true, votes: complaint.votes, hasVoted: !!vote });
 };
 
 module.exports = { toggleVote, getVoteStatus };

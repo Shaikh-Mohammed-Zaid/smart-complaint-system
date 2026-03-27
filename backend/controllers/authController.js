@@ -1,49 +1,51 @@
 const crypto = require('crypto');
-const User = require('../models/User');
+const bcrypt = require('bcryptjs');
+const supabase = require('../config/supabase');
 const { generateToken } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLogger');
 const sendEmail = require('../utils/sendEmail');
-const supabase = require('../config/supabase');
 
 const register = async (req, res) => {
   const { name, email, password, department, rollNumber, phone, role } = req.body;
 
-  const userExists = await User.findOne({ email });
-  if (userExists) {
+  // Check if user already exists
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('email', email.toLowerCase())
+    .single();
+
+  if (existing) {
     return res.status(400).json({ success: false, message: 'User already exists' });
   }
 
-  const user = await User.create({
-    name,
-    email,
-    password,
-    department,
-    rollNumber,
-    phone,
-    role: role || 'student'
-  });
+  // Hash password
+  const salt = await bcrypt.genSalt(12);
+  const passwordHash = await bcrypt.hash(password, salt);
 
-  await logActivity(user._id, 'user_registered', 'user', user._id, { role: user.role });
+  const { data: user, error } = await supabase
+    .from('profiles')
+    .insert([{
+      name,
+      email: email.toLowerCase(),
+      password_hash: passwordHash,
+      department: department || '',
+      roll_number: rollNumber || '',
+      phone: phone || '',
+      role: role || 'student'
+    }])
+    .select()
+    .single();
 
-  // Sync to Supabase
-  try {
-    const { error: sbError } = await supabase.from('profiles').insert([
-      {
-        id: crypto.randomUUID(), // Mocking UUID for now if not using SB Auth
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        department: user.department,
-        roll_number: user.rollNumber
-      }
-    ]);
-    if (sbError) console.error('Supabase Sync Error:', sbError);
-  } catch (err) {
-    console.error('Supabase Connection Error:', err);
+  if (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 
-  const token = generateToken(user._id);
-  res.status(201).json({ success: true, token, user });
+  await logActivity(user.id, 'user_registered', 'user', user.id, { role: user.role });
+
+  const token = generateToken(user.id);
+  const { password_hash, ...userResponse } = user;
+  res.status(201).json({ success: true, token, user: userResponse });
 };
 
 const login = async (req, res) => {
@@ -53,76 +55,117 @@ const login = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Please provide email and password' });
   }
 
-  const user = await User.findOne({ email }).select('+password');
-  if (!user || !(await user.matchPassword(password))) {
+  const { data: user } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('email', email.toLowerCase())
+    .single();
+
+  if (!user) {
     return res.status(401).json({ success: false, message: 'Invalid credentials' });
   }
 
-  if (!user.isActive) {
+  const isMatch = await bcrypt.compare(password, user.password_hash);
+  if (!isMatch) {
+    return res.status(401).json({ success: false, message: 'Invalid credentials' });
+  }
+
+  if (!user.is_active) {
     return res.status(403).json({ success: false, message: 'Your account has been deactivated' });
   }
 
-  user.lastLogin = Date.now();
-  await user.save({ validateBeforeSave: false });
+  // Update last login
+  await supabase
+    .from('profiles')
+    .update({ last_login: new Date().toISOString() })
+    .eq('id', user.id);
 
-  await logActivity(user._id, 'user_login', 'user', user._id);
+  await logActivity(user.id, 'user_login', 'user', user.id);
 
-  const token = generateToken(user._id);
-
-  // Exclude password
-  const userResponse = user.toJSON();
-
+  const token = generateToken(user.id);
+  const { password_hash, ...userResponse } = user;
   res.status(200).json({ success: true, token, user: userResponse });
 };
 
 const getMe = async (req, res) => {
-  const user = await User.findById(req.user.id);
+  const { data: user } = await supabase
+    .from('profiles')
+    .select('id, name, email, role, department, roll_number, phone, avatar, is_active, last_login, created_at')
+    .eq('id', req.user.id)
+    .single();
+
   res.status(200).json({ success: true, user });
 };
 
 const updateProfile = async (req, res) => {
   const { name, department, rollNumber, phone } = req.body;
-  const user = await User.findById(req.user.id);
 
-  if (name) user.name = name;
-  if (department !== undefined) user.department = department;
-  if (rollNumber !== undefined) user.rollNumber = rollNumber;
-  if (phone !== undefined) user.phone = phone;
+  const updates = {};
+  if (name) updates.name = name;
+  if (department !== undefined) updates.department = department;
+  if (rollNumber !== undefined) updates.roll_number = rollNumber;
+  if (phone !== undefined) updates.phone = phone;
+  updates.updated_at = new Date().toISOString();
 
-  await user.save();
-  await logActivity(user._id, 'profile_updated', 'user', user._id);
+  const { data: user, error } = await supabase
+    .from('profiles')
+    .update(updates)
+    .eq('id', req.user.id)
+    .select('id, name, email, role, department, roll_number, phone, avatar, is_active')
+    .single();
 
+  if (error) return res.status(500).json({ success: false, message: error.message });
+
+  await logActivity(req.user.id, 'profile_updated', 'user', req.user.id);
   res.status(200).json({ success: true, user });
 };
 
 const changePassword = async (req, res) => {
   const { oldPassword, newPassword } = req.body;
-  const user = await User.findById(req.user.id).select('+password');
 
-  if (!(await user.matchPassword(oldPassword))) {
+  const { data: user } = await supabase
+    .from('profiles')
+    .select('password_hash')
+    .eq('id', req.user.id)
+    .single();
+
+  const isMatch = await bcrypt.compare(oldPassword, user.password_hash);
+  if (!isMatch) {
     return res.status(400).json({ success: false, message: 'Incorrect old password' });
   }
 
-  user.password = newPassword;
-  await user.save();
-  await logActivity(user._id, 'password_changed', 'user', user._id);
+  const salt = await bcrypt.genSalt(12);
+  const passwordHash = await bcrypt.hash(newPassword, salt);
+
+  await supabase.from('profiles').update({ password_hash: passwordHash }).eq('id', req.user.id);
+  await logActivity(req.user.id, 'password_changed', 'user', req.user.id);
 
   res.status(200).json({ success: true, message: 'Password updated successfully' });
 };
 
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
-  const user = await User.findOne({ email });
+
+  const { data: user } = await supabase
+    .from('profiles')
+    .select('id, email, name')
+    .eq('email', email.toLowerCase())
+    .single();
 
   if (!user) {
     return res.status(404).json({ success: false, message: 'No account found with that email' });
   }
 
-  const resetToken = user.getResetPasswordToken();
-  await user.save({ validateBeforeSave: false });
+  const resetToken = crypto.randomBytes(20).toString('hex');
+  const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+  const expire = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+  await supabase.from('profiles').update({
+    reset_password_token: hashedToken,
+    reset_password_expire: expire
+  }).eq('id', user.id);
 
   const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
-
   const html = `
     <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0f0f1a; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
       <div style="padding: 40px 32px; text-align: center;">
@@ -138,51 +181,46 @@ const forgotPassword = async (req, res) => {
     await sendEmail({ to: user.email, subject: 'SmartFlow — Password Reset', html });
     res.status(200).json({ success: true, message: 'Reset link sent to your email' });
   } catch (err) {
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpire = undefined;
-    await user.save({ validateBeforeSave: false });
+    await supabase.from('profiles').update({
+      reset_password_token: null,
+      reset_password_expire: null
+    }).eq('id', user.id);
     return res.status(500).json({ success: false, message: 'Email could not be sent' });
   }
 };
 
 const resetPassword = async (req, res) => {
-  const resetPasswordToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
+  const hashedToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
 
-  const user = await User.findOne({
-    resetPasswordToken,
-    resetPasswordExpire: { $gt: Date.now() }
-  });
+  const { data: user } = await supabase
+    .from('profiles')
+    .select('id, reset_password_expire')
+    .eq('reset_password_token', hashedToken)
+    .single();
 
-  if (!user) {
+  if (!user || new Date(user.reset_password_expire) < new Date()) {
     return res.status(400).json({ success: false, message: 'Invalid or expired reset token' });
   }
 
   const { password, confirmPassword } = req.body;
-
   if (!password || password.length < 6) {
     return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
   }
-
   if (password !== confirmPassword) {
     return res.status(400).json({ success: false, message: 'Passwords do not match' });
   }
 
-  user.password = password;
-  user.resetPasswordToken = undefined;
-  user.resetPasswordExpire = undefined;
-  await user.save();
+  const salt = await bcrypt.genSalt(12);
+  const passwordHash = await bcrypt.hash(password, salt);
 
-  await logActivity(user._id, 'password_reset', 'user', user._id);
+  await supabase.from('profiles').update({
+    password_hash: passwordHash,
+    reset_password_token: null,
+    reset_password_expire: null
+  }).eq('id', user.id);
 
+  await logActivity(user.id, 'password_reset', 'user', user.id);
   res.status(200).json({ success: true, message: 'Password reset successful' });
 };
 
-module.exports = {
-  register,
-  login,
-  getMe,
-  updateProfile,
-  changePassword,
-  forgotPassword,
-  resetPassword
-};
+module.exports = { register, login, getMe, updateProfile, changePassword, forgotPassword, resetPassword };

@@ -1,11 +1,7 @@
 const path = require('path');
 const fs = require('fs');
-const Complaint = require('../models/Complaint');
-const Vote = require('../models/Vote');
-const Notification = require('../models/Notification');
-const User = require('../models/User');
-const { logActivity } = require('../utils/activityLogger');
 const supabase = require('../config/supabase');
+const { logActivity } = require('../utils/activityLogger');
 
 const extractTags = (text) => {
   if (!text) return [];
@@ -17,105 +13,70 @@ const extractTags = (text) => {
 exports.getComplaintFeed = async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
 
-  let query = { status: { $ne: 'Rejected' } };
-  
-  if (req.query.category) {
-    query.category = req.query.category;
-  }
+  let query = supabase
+    .from('complaints')
+    .select('*, profiles:created_by(name, department, avatar)', { count: 'exact' })
+    .neq('status', 'Rejected')
+    .order('trending_score', { ascending: false })
+    .range(from, to);
 
-  // Recalculate trending offline in bulk or on fetch is expensive at scale,
-  // but for the spec we'll fetch then sort or simply rely on the background calculated fields
-  // "Recalculate trendingScore on fetch: votes * (1 / (hoursOld + 2)^1.5)"
-  const complaints = await Complaint.find(query);
-  
-  // Recalculate dynamically
-  for (let c of complaints) {
-    const hoursOld = (Date.now() - c.createdAt.getTime()) / (1000 * 60 * 60);
-    const timeFactor = 1 / Math.pow(Math.max(0, hoursOld) + 2, 1.5);
-    c.trendingScore = Math.max(0, c.votes * timeFactor);
-    await c.save({ validateBeforeSave: false }); // Save the new score quietly
-  }
+  if (req.query.category) query = query.eq('category', req.query.category);
 
-  const sortedComplaints = await Complaint.find(query)
-    .populate('createdBy', 'name department avatar')
-    .sort({ trendingScore: -1 })
-    .skip(skip)
-    .limit(limit);
+  const { data: complaints, count } = await query;
 
-  const total = await Complaint.countDocuments(query);
-  
-  // Attach hasVoted 
-  const userVotes = await Vote.find({ userId: req.user.id });
-  const votedIds = new Set(userVotes.map(v => v.complaintId.toString()));
+  // Get user votes
+  const { data: userVotes } = await supabase.from('votes').select('complaint_id').eq('user_id', req.user.id);
+  const votedIds = new Set((userVotes || []).map(v => v.complaint_id));
 
-  const data = sortedComplaints.map(c => ({
-    ...c.toJSON(),
-    hasVoted: votedIds.has(c._id.toString())
-  }));
-
-  res.status(200).json({ success: true, count: data.length, total, pages: Math.ceil(total/limit), page, data });
+  const data = (complaints || []).map(c => ({ ...c, hasVoted: votedIds.has(c.id) }));
+  res.status(200).json({ success: true, count: data.length, total: count, pages: Math.ceil(count / limit), page, data });
 };
 
 exports.getComplaintTrending = async (req, res) => {
-  const complaints = await Complaint.find({ status: { $ne: 'Rejected' } })
-    .populate('createdBy', 'name')
-    .sort({ trendingScore: -1 })
+  const { data: complaints } = await supabase
+    .from('complaints')
+    .select('*, profiles:created_by(name)')
+    .neq('status', 'Rejected')
+    .order('trending_score', { ascending: false })
     .limit(5);
 
-  const userVotes = await Vote.find({ userId: req.user.id });
-  const votedIds = new Set(userVotes.map(v => v.complaintId.toString()));
+  const { data: userVotes } = await supabase.from('votes').select('complaint_id').eq('user_id', req.user.id);
+  const votedIds = new Set((userVotes || []).map(v => v.complaint_id));
 
-  const data = complaints.map((c, i) => ({
-    ...c.toJSON(),
-    rank: i + 1,
-    hasVoted: votedIds.has(c._id.toString())
-  }));
-
+  const data = (complaints || []).map((c, i) => ({ ...c, rank: i + 1, hasVoted: votedIds.has(c.id) }));
   res.status(200).json({ success: true, data });
 };
 
 exports.getComplaints = async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
 
-  let query = {};
-  
-  // Filters
-  if (req.user.role === 'student') query.createdBy = req.user.id;
-  if (req.query.status) query.status = req.query.status;
-  if (req.query.priority) query.priority = req.query.priority;
-  if (req.query.category) query.category = req.query.category;
-  if (req.query.search) {
-    query.$or = [
-      { title: { $regex: req.query.search, $options: 'i' } },
-      { location: { $regex: req.query.search, $options: 'i' } }
-    ];
-  }
+  let query = supabase
+    .from('complaints')
+    .select('*, profiles:created_by(name, department, email, roll_number)', { count: 'exact' })
+    .range(from, to);
 
-  const sortValue = req.query.sort === 'votes' ? { votes: -1 } : 
-                    req.query.sort === 'priority' ? { priority: -1 } : 
-                    { createdAt: -1 };
+  if (req.user.role === 'student') query = query.eq('created_by', req.user.id);
+  if (req.query.status) query = query.eq('status', req.query.status);
+  if (req.query.priority) query = query.eq('priority', req.query.priority);
+  if (req.query.category) query = query.eq('category', req.query.category);
+  if (req.query.search) query = query.or(`title.ilike.%${req.query.search}%,location.ilike.%${req.query.search}%`);
 
-  const complaints = await Complaint.find(query)
-    .populate('createdBy', 'name department email rollNumber')
-    .sort(sortValue)
-    .skip(skip)
-    .limit(limit);
+  const sortField = req.query.sort === 'votes' ? 'votes' : req.query.sort === 'priority' ? 'priority' : 'created_at';
+  query = query.order(sortField, { ascending: false });
 
-  const total = await Complaint.countDocuments(query);
+  const { data: complaints, count } = await query;
 
-  const userVotes = await Vote.find({ userId: req.user.id });
-  const votedIds = new Set(userVotes.map(v => v.complaintId.toString()));
+  const { data: userVotes } = await supabase.from('votes').select('complaint_id').eq('user_id', req.user.id);
+  const votedIds = new Set((userVotes || []).map(v => v.complaint_id));
 
-  const data = complaints.map(c => ({
-    ...c.toJSON(),
-    hasVoted: votedIds.has(c._id.toString())
-  }));
-
-  res.status(200).json({ success: true, count: data.length, total, pages: Math.ceil(total/limit), page, data });
+  const data = (complaints || []).map(c => ({ ...c, hasVoted: votedIds.has(c.id) }));
+  res.status(200).json({ success: true, count: data.length, total: count, pages: Math.ceil(count / limit), page, data });
 };
 
 exports.createComplaint = async (req, res) => {
@@ -126,141 +87,109 @@ exports.createComplaint = async (req, res) => {
   if (category === 'WiFi / Network Issues') {
     suggestedPriority = 'High';
   } else {
-    // See if similar complaints have over 10 votes
-    const similar = await Complaint.find({ category, status: 'Pending' });
-    if (similar.some(s => s.votes > 10)) {
-      suggestedPriority = 'Critical';
-    }
+    const { data: similar } = await supabase.from('complaints').select('votes').eq('category', category).eq('status', 'Pending');
+    if (similar && similar.some(s => s.votes > 10)) suggestedPriority = 'Critical';
   }
 
   const tags = extractTags(`${title} ${description}`);
+  let imageUrl = '';
+  if (req.file) imageUrl = `/uploads/${req.file.filename}`;
 
-  let imagePath = '';
-  if (req.file) {
-    imagePath = `/uploads/${req.file.filename}`;
-  }
+  const { data: complaint, error } = await supabase
+    .from('complaints')
+    .insert([{
+      title, description, category, location,
+      image_url: imageUrl,
+      created_by: req.user.id,
+      suggested_priority: suggestedPriority,
+      tags
+    }])
+    .select()
+    .single();
 
-  const complaint = await Complaint.create({
-    title, description, category, location, image: imagePath,
-    createdBy: req.user.id,
-    suggestedPriority,
-    tags
-  });
+  if (error) return res.status(500).json({ success: false, message: error.message });
 
-  await logActivity(req.user.id, 'complaint_created', 'complaint', complaint._id, { title });
-
-  // Sync to Supabase
-  try {
-    const { error: sbError } = await supabase.from('complaints').insert([
-      {
-        title: complaint.title,
-        description: complaint.description,
-        category: complaint.category,
-        status: complaint.status,
-        priority: complaint.priority,
-        image_url: complaint.image,
-        created_at: complaint.createdAt
-      }
-    ]);
-    if (sbError) console.error('Supabase Sync Error:', sbError);
-  } catch (err) {
-    console.error('Supabase Connection Error:', err);
-  }
-
-  // Notify Admin Room
+  await logActivity(req.user.id, 'complaint_created', 'complaint', complaint.id, { title });
   io.to('admin_room').emit('new_complaint', complaint);
 
   res.status(201).json({ success: true, data: complaint });
 };
 
 exports.getComplaint = async (req, res) => {
-  const complaint = await Complaint.findById(req.params.id)
-    .populate('createdBy', 'name department email rollNumber avatar avatar');
+  const { data: complaint, error } = await supabase
+    .from('complaints')
+    .select('*, profiles:created_by(name, department, email, roll_number, avatar)')
+    .eq('id', req.params.id)
+    .single();
 
-  if (!complaint) return res.status(404).json({ success: false, message: 'Complaint not found' });
+  if (error || !complaint) return res.status(404).json({ success: false, message: 'Complaint not found' });
 
-  // Access check
-  if (req.user.role === 'student' && complaint.createdBy._id.toString() !== req.user.id) {
+  if (req.user.role === 'student' && complaint.created_by !== req.user.id) {
     return res.status(403).json({ success: false, message: 'Not authorized' });
   }
 
-  complaint.viewCount += 1;
-  await complaint.save({ validateBeforeSave: false });
+  // Increment view count
+  await supabase.from('complaints').update({ view_count: (complaint.view_count || 0) + 1 }).eq('id', complaint.id);
 
-  const vote = await Vote.findOne({ userId: req.user.id, complaintId: complaint._id });
-  
-  const data = {
-    ...complaint.toJSON(),
-    hasVoted: !!vote
-  };
+  const { data: vote } = await supabase.from('votes').select('id').eq('user_id', req.user.id).eq('complaint_id', complaint.id).single();
 
-  res.status(200).json({ success: true, data });
+  res.status(200).json({ success: true, data: { ...complaint, hasVoted: !!vote } });
 };
 
 exports.updateComplaint = async (req, res) => {
-  // adminOnly route
   const io = req.app.get('io');
-  const complaint = await Complaint.findById(req.params.id);
 
+  const { data: complaint } = await supabase.from('complaints').select('*').eq('id', req.params.id).single();
   if (!complaint) return res.status(404).json({ success: false, message: 'Complaint not found' });
 
   const oldStatus = complaint.status;
-  
-  if (req.body.status) complaint.status = req.body.status;
-  if (req.body.priority) complaint.priority = req.body.priority;
-  if (req.body.adminNote) complaint.adminNote = req.body.adminNote;
-  if (req.body.assignedTo) complaint.assignedTo = req.body.assignedTo;
+  const updates = {};
+  if (req.body.status) updates.status = req.body.status;
+  if (req.body.priority) updates.priority = req.body.priority;
+  if (req.body.adminNote) updates.admin_note = req.body.adminNote;
+  if (req.body.assignedTo) updates.assigned_to = req.body.assignedTo;
+  if (updates.status === 'Resolved' && !complaint.resolved_at) updates.resolved_at = new Date().toISOString();
+  updates.updated_at = new Date().toISOString();
 
-  if (complaint.status === 'Resolved' && !complaint.resolvedAt) {
-    complaint.resolvedAt = Date.now();
-  }
+  const { data: updated } = await supabase.from('complaints').update(updates).eq('id', complaint.id).select().single();
 
-  await complaint.save();
-
-  if (oldStatus !== complaint.status) {
-    await logActivity(req.user.id, 'status_updated', 'complaint', complaint._id, { from: oldStatus, to: complaint.status });
-    
-    // Notification to owner
-    await Notification.create({
-      userId: complaint.createdBy,
+  if (oldStatus !== updated.status) {
+    await logActivity(req.user.id, 'status_updated', 'complaint', complaint.id, { from: oldStatus, to: updated.status });
+    await supabase.from('notifications').insert([{
+      user_id: complaint.created_by,
       type: 'status_update',
       title: 'Status Updated',
-      message: `Your complaint "${complaint.title}" is now ${complaint.status}.`,
-      complaintId: complaint._id
-    });
-    io.to(`user_${complaint.createdBy}`).emit('notification');
+      message: `Your complaint "${complaint.title}" is now ${updated.status}.`,
+      complaint_id: complaint.id
+    }]);
+    io.to(`user_${complaint.created_by}`).emit('notification');
   }
 
-  io.to(`complaint_${complaint._id}`).emit('complaint_updated', complaint);
-  io.to(`user_${complaint.createdBy}`).emit('complaint_updated', complaint);
-
-  res.status(200).json({ success: true, data: complaint });
+  io.to(`complaint_${complaint.id}`).emit('complaint_updated', updated);
+  io.to(`user_${complaint.created_by}`).emit('complaint_updated', updated);
+  res.status(200).json({ success: true, data: updated });
 };
 
 exports.deleteComplaint = async (req, res) => {
-  const complaint = await Complaint.findById(req.params.id);
-
+  const { data: complaint } = await supabase.from('complaints').select('*').eq('id', req.params.id).single();
   if (!complaint) return res.status(404).json({ success: false, message: 'Complaint not found' });
 
   if (req.user.role === 'student') {
-    if (complaint.createdBy.toString() !== req.user.id) {
-      return res.status(403).json({ success: false, message: 'Not authorized' });
-    }
-    if (complaint.status !== 'Pending') {
-      return res.status(400).json({ success: false, message: 'Can only delete Pending complaints' });
+    if (complaint.created_by !== req.user.id) return res.status(403).json({ success: false, message: 'Not authorized' });
+    if (complaint.status !== 'Pending') return res.status(400).json({ success: false, message: 'Can only delete Pending complaints' });
+  }
+
+  if (complaint.image_url) {
+    const filename = complaint.image_url.split('/uploads/')[1];
+    if (filename) {
+      const fp = path.join(__dirname, '..', 'uploads', filename);
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
     }
   }
 
-  if (complaint.image) {
-    const filename = complaint.image.split('/uploads/')[1];
-    const fp = path.join(__dirname, '..', 'uploads', filename);
-    if (fs.existsSync(fp)) fs.unlinkSync(fp);
-  }
-
-  await Vote.deleteMany({ complaintId: complaint._id });
-  
-  await complaint.deleteOne();
-  await logActivity(req.user.id, 'complaint_deleted', 'complaint', complaint._id);
+  await supabase.from('votes').delete().eq('complaint_id', complaint.id);
+  await supabase.from('complaints').delete().eq('id', complaint.id);
+  await logActivity(req.user.id, 'complaint_deleted', 'complaint', complaint.id);
 
   res.status(200).json({ success: true, data: {} });
 };

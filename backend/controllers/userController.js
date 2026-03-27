@@ -1,70 +1,70 @@
-const User = require('../models/User');
-const Complaint = require('../models/Complaint');
+const supabase = require('../config/supabase');
 
 exports.getUsers = async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
   const limit = parseInt(req.query.limit, 10) || 10;
-  const skip = (page - 1) * limit;
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
 
-  let query = {};
+  let query = supabase
+    .from('profiles')
+    .select('id, name, email, role, department, roll_number, avatar, is_active, last_login, created_at', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(from, to);
 
-  if (req.query.role) query.role = req.query.role;
+  if (req.query.role) query = query.eq('role', req.query.role);
   if (req.query.search) {
-    query.$or = [
-      { name: { $regex: req.query.search, $options: 'i' } },
-      { email: { $regex: req.query.search, $options: 'i' } },
-      { department: { $regex: req.query.search, $options: 'i' } }
-    ];
+    query = query.or(`name.ilike.%${req.query.search}%,email.ilike.%${req.query.search}%,department.ilike.%${req.query.search}%`);
   }
 
-  const users = await User.find(query).skip(skip).limit(limit).sort({ createdAt: -1 });
+  const { data: users, count, error } = await query;
+  if (error) return res.status(500).json({ success: false, message: error.message });
 
-  // Compute complaint resolved / total counts efficiently
-  const results = [];
-  for (let u of users) {
-    const total = await Complaint.countDocuments({ createdBy: u._id });
-    const resolved = await Complaint.countDocuments({ createdBy: u._id, status: 'Resolved' });
-    const pending = await Complaint.countDocuments({ createdBy: u._id, status: 'Pending' });
+  // Get complaint counts for each user
+  const results = await Promise.all((users || []).map(async (u) => {
+    const { count: total } = await supabase.from('complaints').select('*', { count: 'exact', head: true }).eq('created_by', u.id);
+    const { count: resolved } = await supabase.from('complaints').select('*', { count: 'exact', head: true }).eq('created_by', u.id).eq('status', 'Resolved');
+    const { count: pending } = await supabase.from('complaints').select('*', { count: 'exact', head: true }).eq('created_by', u.id).eq('status', 'Pending');
+    return { ...u, complaintCount: total || 0, resolvedCount: resolved || 0, pendingCount: pending || 0 };
+  }));
 
-    results.push({
-      ...u.toJSON(),
-      complaintCount: total,
-      resolvedCount: resolved,
-      pendingCount: pending
-    });
-  }
-
-  const total = await User.countDocuments(query);
-
-  res.status(200).json({ success: true, count: results.length, total, pages: Math.ceil(total/limit), page, data: results });
+  res.status(200).json({ success: true, count: results.length, total: count, pages: Math.ceil(count / limit), page, data: results });
 };
 
 exports.getUser = async (req, res) => {
-  const user = await User.findById(req.params.id);
-  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  const { data: user, error } = await supabase
+    .from('profiles')
+    .select('id, name, email, role, department, roll_number, avatar, is_active, last_login, created_at')
+    .eq('id', req.params.id)
+    .single();
+
+  if (error || !user) return res.status(404).json({ success: false, message: 'User not found' });
   res.status(200).json({ success: true, data: user });
 };
 
 exports.updateUser = async (req, res) => {
-  const user = await User.findById(req.params.id);
-  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  const updates = {};
+  if (req.body.isActive !== undefined) updates.is_active = req.body.isActive;
+  if (req.body.role && req.user.role === 'admin') updates.role = req.body.role;
+  if (req.body.department) updates.department = req.body.department;
+  updates.updated_at = new Date().toISOString();
 
-  if (req.body.isActive !== undefined) user.isActive = req.body.isActive;
-  if (req.body.role && req.user.role === 'admin') user.role = req.body.role;
-  if (req.body.department) user.department = req.body.department;
+  const { data: user, error } = await supabase
+    .from('profiles')
+    .update(updates)
+    .eq('id', req.params.id)
+    .select('id, name, email, role, department, is_active')
+    .single();
 
-  await user.save();
+  if (error || !user) return res.status(404).json({ success: false, message: 'User not found' });
   res.status(200).json({ success: true, data: user });
 };
 
 exports.deleteUser = async (req, res) => {
-  const user = await User.findById(req.params.id);
+  const { data: user } = await supabase.from('profiles').select('role').eq('id', req.params.id).single();
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  if (user.role === 'admin') return res.status(400).json({ success: false, message: 'Cannot delete admin accounts' });
 
-  if (user.role === 'admin') {
-    return res.status(400).json({ success: false, message: 'Cannot delete admin accounts' });
-  }
-
-  await user.deleteOne();
+  await supabase.from('profiles').delete().eq('id', req.params.id);
   res.status(200).json({ success: true, data: {} });
 };
