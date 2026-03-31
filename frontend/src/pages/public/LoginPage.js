@@ -32,15 +32,6 @@ const LoginPage = () => {
     }
   };
 
-  const handleDemo = (type) => {
-    if(type === 'admin') {
-      setEmail('admin@college.edu');
-      setPassword('admin123');
-    } else {
-      setEmail('arjun@college.edu');
-      setPassword('student123');
-    }
-  };
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-[#0f0f1a] relative overflow-hidden">
