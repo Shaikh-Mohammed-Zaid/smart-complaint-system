@@ -26,12 +26,12 @@ const register = async (req, res) => {
   const { data: user, error } = await supabase
     .from('profiles')
     .insert([{
+      id: crypto.randomUUID(),
       name,
       email: email.toLowerCase(),
       password_hash: passwordHash,
       department: department || '',
       roll_number: rollNumber || '',
-      phone: phone || '',
       role: role || 'student'
     }])
     .select()
