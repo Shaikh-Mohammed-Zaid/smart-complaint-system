@@ -35,7 +35,7 @@ const NotificationDropdown = ({ onClose }) => {
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       className="absolute right-0 mt-3 w-80 sm:w-96 glass-card-elevated shadow-2xl overflow-hidden z-50 origin-top-right"
     >
-      <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
+      <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5 z-50 opacity-90">
         <h3 className="font-bold text-white flex items-center">
           <Bell size={16} className="mr-2" />
           Notifications

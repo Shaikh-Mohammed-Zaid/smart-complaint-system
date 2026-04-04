@@ -25,7 +25,17 @@ exports.getUsers = async (req, res) => {
     const { count: total } = await supabase.from('complaints').select('*', { count: 'exact', head: true }).eq('created_by', u.id);
     const { count: resolved } = await supabase.from('complaints').select('*', { count: 'exact', head: true }).eq('created_by', u.id).eq('status', 'Resolved');
     const { count: pending } = await supabase.from('complaints').select('*', { count: 'exact', head: true }).eq('created_by', u.id).eq('status', 'Pending');
-    return { ...u, complaintCount: total || 0, resolvedCount: resolved || 0, pendingCount: pending || 0 };
+    return { 
+      ...u, 
+      _id: u.id, 
+      isActive: u.is_active, 
+      rollNumber: u.roll_number, 
+      lastLogin: u.last_login,
+      createdAt: u.created_at,
+      complaintCount: total || 0, 
+      resolvedCount: resolved || 0, 
+      pendingCount: pending || 0 
+    };
   }));
 
   res.status(200).json({ success: true, count: results.length, total: count, pages: Math.ceil(count / limit), page, data: results });
@@ -39,7 +49,8 @@ exports.getUser = async (req, res) => {
     .single();
 
   if (error || !user) return res.status(404).json({ success: false, message: 'User not found' });
-  res.status(200).json({ success: true, data: user });
+  const mappedUser = { ...user, _id: user.id, isActive: user.is_active, rollNumber: user.roll_number, lastLogin: user.last_login, createdAt: user.created_at };
+  res.status(200).json({ success: true, data: mappedUser });
 };
 
 exports.updateUser = async (req, res) => {
@@ -57,7 +68,8 @@ exports.updateUser = async (req, res) => {
     .single();
 
   if (error || !user) return res.status(404).json({ success: false, message: 'User not found' });
-  res.status(200).json({ success: true, data: user });
+  const mappedUser = { ...user, _id: user.id, isActive: user.is_active };
+  res.status(200).json({ success: true, data: mappedUser });
 };
 
 exports.deleteUser = async (req, res) => {

@@ -1,133 +1,97 @@
 require('dotenv').config();
-const mongoose = require('mongoose');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const User = require('../models/User');
-const Complaint = require('../models/Complaint');
-const Vote = require('../models/Vote');
-const Comment = require('../models/Comment');
-const Notification = require('../models/Notification');
-const ActivityLog = require('../models/ActivityLog');
-
-const connectDB = require('../config/db');
+const supabase = require('../config/supabase');
 
 const importData = async () => {
   try {
-    await connectDB();
-
-    await User.deleteMany();
-    await Complaint.deleteMany();
-    await Vote.deleteMany();
-    await Comment.deleteMany();
-    await Notification.deleteMany();
-    await ActivityLog.deleteMany();
-
-    // Passwords will be hashed strictly by the User schema pre-save hook
+    console.log('🔄 Cleaning up existing data in Supabase...');
+    
+    // Deleting from profiles will cascade to all other tables due to ON DELETE CASCADE
+    // But since PostgREST doesn't support deleting without a filter or matching all cleanly without risk of blocking
+    // We will do a generic delete.
+    const { error: delErr } = await supabase.from('profiles').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (delErr) {
+       console.log('Warning on cleanup:', delErr.message);
+    }
+    
     const adminPassword = 'admin123';
     const studentPassword = 'student123';
 
+    const salt = await bcrypt.genSalt(12);
+    const adminHash = await bcrypt.hash(adminPassword, salt);
+    const studentHash = await bcrypt.hash(studentPassword, salt);
+
     // Create Admins
-    const admin1 = await User.create({
-      name: "Hamza Saiyed", email: "saiyedhamza7171@gmail.com", password: "Saiyed@5747",
-      role: "admin", department: "Administration"
-    });
-    const admin2 = await User.create({
-      name: "Zaid Shaikh", email: "zaidshaikhus2254@gmail.com", password: "Zaid@2254",
-      role: "admin", department: "Administration"
-    });
-    // const admin3 = await User.create({
-    //   name: "Admin Three", email: "admin3@college.edu", password: adminPassword,
-    //   role: "admin", department: "Administration"
-    // });
+    console.log('👤 Creating Admins...');
+    const admin1 = {
+      id: crypto.randomUUID(), name: "Hamza Saiyed", email: "saiyedhamza7171@gmail.com", 
+      password_hash: await bcrypt.hash("Saiyed@5747", salt), role: "admin", department: "Administration"
+    };
+    const admin2 = {
+      id: crypto.randomUUID(), name: "Zaid Shaikh", email: "zaidshaikhus2254@gmail.com", 
+      password_hash: await bcrypt.hash("Password@123", salt), role: "admin", department: "Administration"
+    };
+    
+    await supabase.from('profiles').insert([admin1, admin2]);
 
-    // Use admin1 as the primary admin for seed data
-    const adminUser = admin1;
-    const adminUser2 = admin2;
     // Create Students
+    console.log('🎓 Creating Students...');
     const studentData = [
-      { name: "Arjun Sharma", email: "arjun@college.edu", dept: "CS", roll: "CS2021001" },
-      { name: "Priya Patel", email: "priya@college.edu", dept: "Electronics", roll: "EC2021002" },
-      { name: "Rahul Singh", email: "rahul@college.edu", dept: "Mechanical", roll: "ME2021003" },
-      { name: "Ananya Gupta", email: "ananya@college.edu", dept: "Civil", roll: "CV2021004" },
-      { name: "Vikram Mehta", email: "vikram@college.edu", dept: "CS", roll: "CS2021005" },
-      { name: "Sneha Iyer", email: "sneha@college.edu", dept: "Biotech", roll: "BT2021006" }
-    ];
+      { id: crypto.randomUUID(), name: "Arjun Sharma", email: "arjun@college.edu", department: "CS", roll_number: "CS2021001" },
+      { id: crypto.randomUUID(), name: "Priya Patel", email: "priya@college.edu", department: "Electronics", roll_number: "EC2021002" },
+      { id: crypto.randomUUID(), name: "Rahul Singh", email: "rahul@college.edu", department: "Mechanical", roll_number: "ME2021003" },
+      { id: crypto.randomUUID(), name: "Ananya Gupta", email: "ananya@college.edu", department: "Civil", roll_number: "CV2021004" },
+      { id: crypto.randomUUID(), name: "Vikram Mehta", email: "vikram@college.edu", department: "CS", roll_number: "CS2021005" },
+      { id: crypto.randomUUID(), name: "Sneha Iyer", email: "sneha@college.edu", department: "Biotech", roll_number: "BT2021006" }
+    ].map(s => ({ ...s, password_hash: studentHash, role: 'student' }));
 
-    const students = await Promise.all(studentData.map(s => User.create({
-      name: s.name, email: s.email, password: studentPassword, role: 'student', department: s.dept, rollNumber: s.roll
-    })));
+    await supabase.from('profiles').insert(studentData);
 
-    // Create 10 Complaints
+    // Create Complaints
+    console.log('📝 Creating Complaints...');
     const cData = [
-      { title: "Projector not working in Room 101", desc: "Bulb fused.", cat: "Classroom Issues", loc: "Block A - 101", pri: "High", status: "In Progress", votes: 12 },
-      { title: "WiFi down in entire library", desc: "No signal since morning.", cat: "WiFi / Network Issues", loc: "Library Main", pri: "Critical", status: "Pending", votes: 34 },
-      { title: "Broken oscilloscopes in ECE Lab", desc: "Screen dead.", cat: "Lab Equipment Problems", loc: "ECE Lab 2", pri: "Medium", status: "Resolved", votes: 8, resolvedAt: Date.now() },
-      { title: "Hostel bathroom leaks Block C", desc: "Roof dripping.", cat: "Hostel Complaints", loc: "Block C G-Floor", pri: "High", status: "Pending", votes: 19 },
-      { title: "Library reference section disorganized", desc: "Books mismanaged.", cat: "Library Issues", loc: "Library Ref Section", pri: "Low", status: "Pending", votes: 4 },
-      { title: "Canteen garbage overflowing", desc: "Please empty trash.", cat: "Cleanliness Issues", loc: "Main Canteen", pri: "High", status: "In Progress", votes: 22 },
-      { title: "AC broken in main seminar hall", desc: "Compressor dead.", cat: "Classroom Issues", loc: "Seminar Hall", pri: "Critical", status: "Pending", votes: 41 },
-      { title: "Lab computers extremely slow", desc: "Needs RAM upgrade.", cat: "Lab Equipment Problems", loc: "CS Lab 1", pri: "Medium", status: "Resolved", votes: 11, resolvedAt: Date.now() },
-      { title: "No WiFi in hostel Block A", desc: "Router not responding.", cat: "WiFi / Network Issues", loc: "Hostel Block A", pri: "High", status: "In Progress", votes: 28 },
-      { title: "Broken gate at campus entrance", desc: "Hinge broken.", cat: "Other", loc: "Main Gate", pri: "Medium", status: "Pending", votes: 7 }
+      { title: "Projector not working in Room 101", description: "Bulb fused.", category: "Classroom Issues", location: "Block A - 101", priority: "High", status: "In Progress", votes: 12 },
+      { title: "WiFi down in entire library", description: "No signal since morning.", category: "WiFi / Network Issues", location: "Library Main", priority: "Critical", status: "Pending", votes: 34 },
+      { title: "Broken oscilloscopes in ECE Lab", description: "Screen dead.", category: "Lab Equipment Problems", location: "ECE Lab 2", priority: "Medium", status: "Resolved", votes: 8, resolved_at: new Date().toISOString() },
+      { title: "Hostel bathroom leaks Block C", description: "Roof dripping.", category: "Hostel Complaints", location: "Block C G-Floor", priority: "High", status: "Pending", votes: 19 },
+      { title: "Library reference section disorganized", description: "Books mismanaged.", category: "Library Issues", location: "Library Ref Section", priority: "Low", status: "Pending", votes: 4 },
+      { title: "Canteen garbage overflowing", description: "Please empty trash.", category: "Cleanliness Issues", location: "Main Canteen", priority: "High", status: "In Progress", votes: 22 },
+      { title: "AC broken in main seminar hall", description: "Compressor dead.", category: "Classroom Issues", location: "Seminar Hall", priority: "Critical", status: "Pending", votes: 41 },
+      { title: "Lab computers extremely slow", description: "Needs RAM upgrade.", category: "Lab Equipment Problems", location: "CS Lab 1", priority: "Medium", status: "Resolved", votes: 11, resolved_at: new Date().toISOString() },
+      { title: "No WiFi in hostel Block A", description: "Router not responding.", category: "WiFi / Network Issues", location: "Hostel Block A", priority: "High", status: "In Progress", votes: 28 },
+      { title: "Broken gate at campus entrance", description: "Hinge broken.", category: "Other", location: "Main Gate", priority: "Medium", status: "Pending", votes: 7 }
     ];
 
     const complaints = [];
     for (let i = 0; i < cData.length; i++) {
       const c = cData[i];
-      const owner = students[i % students.length]._id;
-      const comp = await Complaint.create({
-        title: c.title, description: c.desc, category: c.cat, location: c.loc, priority: c.pri, status: c.status,
-        votes: c.votes, createdBy: owner,
-        assignedTo: [0, 5, 8].includes(i) ? adminUser._id : null, 
-        resolvedAt: c.resolvedAt || null, adminNote: c.status === 'Resolved' ? 'Fixed by maintenance.' : ''
-      });
-      // Set created 10 hours ago roughly to compute a mock trendingScore
-      comp.createdAt = new Date(Date.now() - 10 * 60 * 60 * 1000);
-      comp.trendingScore = comp.votes * (1 / Math.pow(10 + 2, 1.5));
-      await comp.save({ validateBeforeSave: false });
+      const owner = studentData[i % studentData.length].id;
+      const isAssigned = [0, 5, 8].includes(i);
+      const pastDate = new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString();
+      const complaintId = crypto.randomUUID();
+      
+      const comp = {
+        id: complaintId,
+        title: c.title, description: c.description, category: c.category, location: c.location, 
+        priority: c.priority, status: c.status, votes: c.votes, created_by: owner,
+        assigned_to: isAssigned ? admin1.id : null,
+        resolved_at: c.resolved_at || null, admin_note: c.status === 'Resolved' ? 'Fixed by maintenance.' : '',
+        trending_score: c.votes * (1 / Math.pow(10 + 2, 1.5)),
+        created_at: pastDate
+      };
       complaints.push(comp);
     }
+    await supabase.from('complaints').insert(complaints);
 
-    // Assign mock votes
-    for (let comp of complaints) {
-      const maxV = Math.min(comp.votes, students.length - 1); // limit mock voters
-      let count = 0;
-      for (let stu of students) {
-        if (count >= maxV) break;
-        if (stu._id.toString() !== comp.createdBy.toString()) {
-          await Vote.create({ userId: stu._id, complaintId: comp._id });
-          count++;
-        }
-      }
-    }
-
-    // Mock Comments
-    await Comment.create({ complaintId: complaints[2]._id, userId: adminUser._id, comment: "Parts ordered.", isAdminComment: true });
-    await Comment.create({ complaintId: complaints[2]._id, userId: complaints[2].createdBy, comment: "Thank you!" });
-    await Comment.create({ complaintId: complaints[5]._id, userId: adminUser._id, comment: "Cleaning staff dispatched.", isAdminComment: true });
-    await Comment.create({ complaintId: complaints[5]._id, userId: students[1]._id, comment: "Still stinks." });
-    await Comment.create({ complaintId: complaints[6]._id, userId: students[2]._id, comment: "Super hot in here." });
-    await Comment.create({ complaintId: complaints[6]._id, userId: students[3]._id, comment: "+1 please fix." });
-    await Comment.create({ complaintId: complaints[7]._id, userId: adminUser._id, comment: "RAM upgraded.", isAdminComment: true });
-    await Comment.create({ complaintId: complaints[8]._id, userId: adminUser._id, comment: "Network team arriving today.", isAdminComment: true });
-
-    // Mock Notifications & Activity (just a few)
-    await Notification.create({ userId: students[0]._id, type: "status_update", title: "Status Updated", message: "Complaint resolved.", complaintId: complaints[2]._id });
-    await Notification.create({ userId: students[1]._id, type: "vote_milestone", title: "Popular Complaint", message: "Reached 10 votes", complaintId: complaints[0]._id });
-
-    await ActivityLog.create({ userId: adminUser._id, action: "status_updated", entityType: "complaint", entityId: complaints[2]._id, metadata: { from: 'In Progress', to: 'Resolved' } });
-    await ActivityLog.create({ userId: adminUser._id, action: "status_updated", entityType: "complaint", entityId: complaints[7]._id, metadata: { from: 'Pending', to: 'Resolved' } });
-    await ActivityLog.create({ userId: students[0]._id, action: "complaint_created", entityType: "complaint", entityId: complaints[0]._id });
-
-    console.log('✅ Database seeded successfully!');
-    console.log('📋 Admin 1: admin1@college.edu / admin123');
-    console.log('📋 Admin 2: admin2@college.edu / admin123');
-    console.log('📋 Admin 3: admin3@college.edu / admin123');
-    console.log('👤 Student:  arjun@college.edu / student123');
-    console.log('📊 Created: 9 users | 10 complaints | 40+ votes | 8 comments');
+    console.log('✅ Database seeded successfully into Supabase!');
+    console.log('📋 Admin 1: saiyedhamza7171@gmail.com / Saiyed@5747');
+    console.log('📋 Admin 2: zaidshaikhus2254@gmail.com / Zaid@2254');
+    console.log('👤 Student: arjun@college.edu / student123');
     
     process.exit();
   } catch (err) {
-    console.error(err);
+    console.error('❌ SEED ERROR:', err);
     process.exit(1);
   }
 };

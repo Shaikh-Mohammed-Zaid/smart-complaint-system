@@ -10,6 +10,31 @@ const extractTags = (text) => {
   return [...new Set(filtered)].slice(0, 5);
 };
 
+// Helper to map Supabase snake_case to Mongoose camelCase expected by frontend
+const mapComplaint = (c) => {
+  if (!c) return null;
+  const mapped = {
+    ...c,
+    _id: c.id,
+    imageUrl: c.image_url,
+    suggestedPriority: c.suggested_priority,
+    trendingScore: c.trending_score,
+    viewCount: c.view_count,
+    assignedTo: c.assigned_to,
+    resolvedAt: c.resolved_at,
+    adminNote: c.admin_note,
+    createdAt: c.created_at,
+    updatedAt: c.updated_at,
+    createdBy: c.profiles ? {
+      _id: c.created_by,
+      ...c.profiles,
+      rollNumber: c.profiles.roll_number
+    } : c.created_by
+  };
+  delete mapped.profiles; // cleanup the nested profile object
+  return mapped;
+};
+
 exports.getComplaintFeed = async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
@@ -27,11 +52,10 @@ exports.getComplaintFeed = async (req, res) => {
 
   const { data: complaints, count } = await query;
 
-  // Get user votes
   const { data: userVotes } = await supabase.from('votes').select('complaint_id').eq('user_id', req.user.id);
   const votedIds = new Set((userVotes || []).map(v => v.complaint_id));
 
-  const data = (complaints || []).map(c => ({ ...c, hasVoted: votedIds.has(c.id) }));
+  const data = (complaints || []).map(c => ({ ...mapComplaint(c), hasVoted: votedIds.has(c.id) }));
   res.status(200).json({ success: true, count: data.length, total: count, pages: Math.ceil(count / limit), page, data });
 };
 
@@ -46,7 +70,7 @@ exports.getComplaintTrending = async (req, res) => {
   const { data: userVotes } = await supabase.from('votes').select('complaint_id').eq('user_id', req.user.id);
   const votedIds = new Set((userVotes || []).map(v => v.complaint_id));
 
-  const data = (complaints || []).map((c, i) => ({ ...c, rank: i + 1, hasVoted: votedIds.has(c.id) }));
+  const data = (complaints || []).map((c, i) => ({ ...mapComplaint(c), rank: i + 1, hasVoted: votedIds.has(c.id) }));
   res.status(200).json({ success: true, data });
 };
 
@@ -75,7 +99,7 @@ exports.getComplaints = async (req, res) => {
   const { data: userVotes } = await supabase.from('votes').select('complaint_id').eq('user_id', req.user.id);
   const votedIds = new Set((userVotes || []).map(v => v.complaint_id));
 
-  const data = (complaints || []).map(c => ({ ...c, hasVoted: votedIds.has(c.id) }));
+  const data = (complaints || []).map(c => ({ ...mapComplaint(c), hasVoted: votedIds.has(c.id) }));
   res.status(200).json({ success: true, count: data.length, total: count, pages: Math.ceil(count / limit), page, data });
 };
 
@@ -104,15 +128,16 @@ exports.createComplaint = async (req, res) => {
       suggested_priority: suggestedPriority,
       tags
     }])
-    .select()
+    .select('*, profiles:created_by(name, department, email, roll_number)')
     .single();
 
   if (error) return res.status(500).json({ success: false, message: error.message });
 
   await logActivity(req.user.id, 'complaint_created', 'complaint', complaint.id, { title });
-  io.to('admin_room').emit('new_complaint', complaint);
+  const mapped = mapComplaint(complaint);
+  io.to('admin_room').emit('new_complaint', mapped);
 
-  res.status(201).json({ success: true, data: complaint });
+  res.status(201).json({ success: true, data: mapped });
 };
 
 exports.getComplaint = async (req, res) => {
@@ -133,7 +158,7 @@ exports.getComplaint = async (req, res) => {
 
   const { data: vote } = await supabase.from('votes').select('id').eq('user_id', req.user.id).eq('complaint_id', complaint.id).single();
 
-  res.status(200).json({ success: true, data: { ...complaint, hasVoted: !!vote } });
+  res.status(200).json({ success: true, data: { ...mapComplaint(complaint), hasVoted: !!vote } });
 };
 
 exports.updateComplaint = async (req, res) => {
@@ -151,7 +176,7 @@ exports.updateComplaint = async (req, res) => {
   if (updates.status === 'Resolved' && !complaint.resolved_at) updates.resolved_at = new Date().toISOString();
   updates.updated_at = new Date().toISOString();
 
-  const { data: updated } = await supabase.from('complaints').update(updates).eq('id', complaint.id).select().single();
+  const { data: updated } = await supabase.from('complaints').update(updates).eq('id', complaint.id).select('*, profiles:created_by(name, department, email, roll_number)').single();
 
   if (oldStatus !== updated.status) {
     await logActivity(req.user.id, 'status_updated', 'complaint', complaint.id, { from: oldStatus, to: updated.status });
@@ -165,9 +190,10 @@ exports.updateComplaint = async (req, res) => {
     io.to(`user_${complaint.created_by}`).emit('notification');
   }
 
-  io.to(`complaint_${complaint.id}`).emit('complaint_updated', updated);
-  io.to(`user_${complaint.created_by}`).emit('complaint_updated', updated);
-  res.status(200).json({ success: true, data: updated });
+  const mappedUpdate = mapComplaint(updated);
+  io.to(`complaint_${complaint.id}`).emit('complaint_updated', mappedUpdate);
+  io.to(`user_${complaint.created_by}`).emit('complaint_updated', mappedUpdate);
+  res.status(200).json({ success: true, data: mappedUpdate });
 };
 
 exports.deleteComplaint = async (req, res) => {

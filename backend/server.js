@@ -60,6 +60,7 @@ if (process.env.NODE_ENV === 'development') {
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Rate Limiting
+app.set('trust proxy', 1);
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 200,

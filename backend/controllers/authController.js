@@ -5,6 +5,18 @@ const { generateToken } = require('../middleware/auth');
 const { logActivity } = require('../utils/activityLogger');
 const sendEmail = require('../utils/sendEmail');
 
+const mapUser = (u) => {
+  if (!u) return null;
+  return {
+    ...u,
+    _id: u.id,
+    isActive: u.is_active,
+    rollNumber: u.roll_number,
+    lastLogin: u.last_login,
+    createdAt: u.created_at
+  };
+};
+
 const register = async (req, res) => {
   const { name, email, password, department, rollNumber, phone, role } = req.body;
 
@@ -45,7 +57,7 @@ const register = async (req, res) => {
 
   const token = generateToken(user.id);
   const { password_hash, ...userResponse } = user;
-  res.status(201).json({ success: true, token, user: userResponse });
+  res.status(201).json({ success: true, token, user: mapUser(userResponse) });
 };
 
 const login = async (req, res) => {
@@ -84,7 +96,7 @@ const login = async (req, res) => {
 
   const token = generateToken(user.id);
   const { password_hash, ...userResponse } = user;
-  res.status(200).json({ success: true, token, user: userResponse });
+  res.status(200).json({ success: true, token, user: mapUser(userResponse) });
 };
 
 const getMe = async (req, res) => {
@@ -94,7 +106,7 @@ const getMe = async (req, res) => {
     .eq('id', req.user.id)
     .single();
 
-  res.status(200).json({ success: true, user });
+  res.status(200).json({ success: true, user: mapUser(user) });
 };
 
 const updateProfile = async (req, res) => {
@@ -117,7 +129,7 @@ const updateProfile = async (req, res) => {
   if (error) return res.status(500).json({ success: false, message: error.message });
 
   await logActivity(req.user.id, 'profile_updated', 'user', req.user.id);
-  res.status(200).json({ success: true, user });
+  res.status(200).json({ success: true, user: mapUser(user) });
 };
 
 const changePassword = async (req, res) => {

@@ -66,6 +66,8 @@ const ManageComplaints = () => {
     }
   };
 
+  const IMAGE_BASE = process.env.REACT_APP_API_URL?.replace('/api', '') || '';
+
   return (
     <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-6 pb-20">
       
@@ -146,6 +148,16 @@ const ManageComplaints = () => {
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Moderate Complaint">
         <form onSubmit={handleUpdate} className="space-y-4">
+          {selectedComplaint?.image && (
+            <div className="mb-4 rounded-xl overflow-hidden border border-white/10">
+              <img 
+                src={selectedComplaint.image.startsWith('http') ? selectedComplaint.image : `${IMAGE_BASE}${selectedComplaint.image}`} 
+                alt="Complaint attachment" 
+                className="w-full h-48 object-cover" 
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            </div>
+          )}
           <div className="p-4 bg-white/5 rounded-xl border border-white/5 mb-6">
             <h4 className="font-bold text-white mb-1">{selectedComplaint?.title}</h4>
             <p className="text-sm text-white/50 line-clamp-2">{selectedComplaint?.description}</p>
