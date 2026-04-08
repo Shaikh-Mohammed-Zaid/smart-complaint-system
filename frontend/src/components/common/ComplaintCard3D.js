@@ -25,6 +25,8 @@ const ComplaintCard3D = ({ complaint, onVote, isTrending = false, rank = 0 }) =>
     y.set(0);
   };
 
+  const complaintId = complaint._id || complaint.id;
+
   return (
     <motion.div
       style={{ rotateX, rotateY, perspective: 1000 }}
@@ -35,7 +37,7 @@ const ComplaintCard3D = ({ complaint, onVote, isTrending = false, rank = 0 }) =>
       transition={{ duration: 0.5, ease: 'easeOut' }}
       className="h-full"
     >
-      <Link to={`/complaints/${complaint._id}`} className="block h-full group">
+      <Link to={`/complaints/${complaintId}`} className="block h-full group">
         <div className="relative h-full glass-card hover:glass-card-elevated hover:glow-brand transition-all duration-300 p-5 flex flex-col justify-between overflow-hidden">
           
           {/* Animated Mesh Background specifically inside the card */}
@@ -55,7 +57,7 @@ const ComplaintCard3D = ({ complaint, onVote, isTrending = false, rank = 0 }) =>
               </div>
               <span className="text-xs text-white/40 flex items-center bg-white/5 px-2 py-1 rounded-full">
                 <Clock size={12} className="mr-1" />
-                {timeAgo(complaint.createdAt)}
+                {timeAgo(complaint.createdAt || complaint.created_at)}
               </span>
             </div>
 
@@ -67,11 +69,11 @@ const ComplaintCard3D = ({ complaint, onVote, isTrending = false, rank = 0 }) =>
               {complaint.description}
             </p>
 
-            {complaint.image && (
+            {(complaint.imageUrl || complaint.image) && (
               <div className="w-full h-32 rounded-lg overflow-hidden mb-4 border border-white/5 relative">
                 <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors z-10" />
                 <img 
-                  src={getImageUrl(complaint.image)} 
+                  src={getImageUrl(complaint.imageUrl || complaint.image)} 
                   alt="Complaint" 
                   className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700"
                 />
@@ -117,7 +119,7 @@ const ComplaintCard3D = ({ complaint, onVote, isTrending = false, rank = 0 }) =>
                 ) : (
                   <>
                     <button 
-                      onClick={(e) => { e.preventDefault(); onVote(complaint._id); }}
+                      onClick={(e) => { e.preventDefault(); onVote && onVote(complaintId); }}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all ${
                         complaint.hasVoted 
                           ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50 glow-brand' 

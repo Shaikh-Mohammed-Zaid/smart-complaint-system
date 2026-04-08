@@ -55,9 +55,9 @@ const ResetPasswordPage = () => {
             password.<br/>
             <span className="text-indigo-400">Stay secure.</span>
           </h1>
-          <p className="text-white/60 text-lg max-w-md">Choose a strong, unique password to protect your SmartFlow account.</p>
+          <p className="text-white/60 text-lg max-w-md">Choose a strong, unique password to protect your Shreyarth Resolve account.</p>
         </div>
-        <div className="text-white/30 text-sm">© SmartFlow 2026</div>
+        <div className="text-white/30 text-sm">© Shreyarth Resolve 2026</div>
       </div>
 
       <div className="flex items-center justify-center p-6 relative z-10">

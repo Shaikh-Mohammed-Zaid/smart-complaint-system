@@ -87,7 +87,7 @@ const StudentDashboard = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {stats?.recentComplaints.map(c => (
-              <ComplaintCard3D key={c._id} complaint={c} />
+              <ComplaintCard3D key={c.id || c._id} complaint={c} />
             ))}
           </div>
         )}
@@ -137,7 +137,7 @@ const StudentDashboard = () => {
 
           <div>
             <label className="label-glass">Attach Image (Optional)</label>
-            <input type="file" accept="image/jpeg,image/png,image/webp" 
+            <input type="file" accept="image/jpeg,image/jpg,image/png" 
               className="w-full text-sm text-white/50 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-500/20 file:text-indigo-400 hover:file:bg-indigo-500/30 transition-all cursor-pointer"
               onChange={e => setImage(e.target.files[0])}
             />

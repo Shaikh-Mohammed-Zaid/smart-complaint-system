@@ -27,6 +27,16 @@ const errorHandler = (err, req, res, next) => {
     message = 'Invalid token';
   }
 
+  // Multer file upload errors
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    statusCode = 400;
+    message = 'File too large. Maximum allowed size is 2MB.';
+  }
+  if (err.message && err.message.includes('Only images allowed')) {
+    statusCode = 400;
+    message = 'Invalid file type. Only JPEG, JPG, and PNG images are allowed.';
+  }
+
   if (process.env.NODE_ENV === 'development') {
     console.error('Error:', err);
   }

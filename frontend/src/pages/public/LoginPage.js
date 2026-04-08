@@ -53,7 +53,7 @@ const LoginPage = () => {
           </h1>
           <p className="text-white/60 text-lg max-w-md">Access your dashboard to track, manage, and accelerate issue resolutions across the campus.</p>
         </div>
-        <div className="text-white/30 text-sm">© SmartFlow 2026</div>
+        <div className="text-white/30 text-sm">© Shreyarth Resolve 2026</div>
       </div>
 
       <div className="flex items-center justify-center p-6 relative z-10">

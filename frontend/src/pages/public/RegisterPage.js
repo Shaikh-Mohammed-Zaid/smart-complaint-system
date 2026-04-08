@@ -59,7 +59,7 @@ const RegisterPage = () => {
           
           <div className="text-center mb-10">
             <h2 className="text-3xl font-bold text-white mb-2">Create Account</h2>
-            <p className="text-white/50">Join the SmartFlow platform as a student.</p>
+            <p className="text-white/50">Join the Shreyarth Resolve platform as a student.</p>
           </div>
 
           <form onSubmit={handleRegister} className="grid grid-cols-1 md:grid-cols-2 gap-5 relative z-10">

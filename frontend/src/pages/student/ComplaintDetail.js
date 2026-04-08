@@ -96,7 +96,7 @@ const ComplaintDetail = () => {
   if (loading) return <LoadingScreen text="Loading details..." />;
   if (!complaint) return null;
 
-  const isOwner = user._id === complaint.createdBy?._id;
+  const isOwner = (user._id || user.id) === (complaint.createdBy?._id || complaint.created_by);
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" className="max-w-5xl mx-auto pb-20">
@@ -135,13 +135,13 @@ const ComplaintDetail = () => {
               <p className="text-white/80 leading-relaxed text-lg whitespace-pre-wrap">{complaint.description}</p>
             </div>
 
-            {complaint.image && (
+            {(complaint.imageUrl || complaint.image) && (
               <div className="mt-8 rounded-2xl overflow-hidden border border-white/10 cursor-pointer group">
                 <img 
-                  src={getImageUrl(complaint.image)} 
+                  src={getImageUrl(complaint.imageUrl || complaint.image)} 
                   alt="Attachment" 
                   className="w-full max-h-[500px] object-cover group-hover:scale-105 transition-transform duration-700" 
-                  onClick={() => window.open(getImageUrl(complaint.image), '_blank')}
+                  onClick={() => window.open(getImageUrl(complaint.imageUrl || complaint.image), '_blank')}
                 />
               </div>
             )}
@@ -156,27 +156,31 @@ const ComplaintDetail = () => {
 
             <div className="space-y-6 mb-8 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
               {comments.map((comment) => {
-                const isMe = comment.userId._id === user._id;
-                const isAdmin = comment.isAdminComment;
+                // Support both Supabase snake_case (raw) and mapped camelCase
+                const authorName = comment.profiles?.name || comment.userId?.name || 'Unknown';
+                const isAdminComment = comment.is_admin_comment || comment.isAdminComment;
+                const commentTime = comment.created_at || comment.createdAt;
+                const commentKey = comment.id || comment._id;
+                const isMe = (comment.user_id || comment.userId?._id) === (user.id || user._id);
 
                 return (
-                  <motion.div key={comment._id} variants={fadeInUp} className={`flex gap-4 ${isMe ? 'flex-row-reverse' : ''}`}>
+                  <motion.div key={commentKey} variants={fadeInUp} className={`flex gap-4 ${isMe ? 'flex-row-reverse' : ''}`}>
                     <div className={`mt-1 shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm border
-                      ${isAdmin ? 'bg-amber-500/20 text-amber-500 border-amber-500/30' : 
+                      ${isAdminComment ? 'bg-amber-500/20 text-amber-500 border-amber-500/30' : 
                         isMe ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' : 'bg-white/10 text-white/70 border-white/20'}`}
                     >
-                      {getInitials(comment.userId.name)}
+                      {getInitials(authorName)}
                     </div>
                     
                     <div className={`flex flex-col max-w-[80%] ${isMe ? 'items-end' : 'items-start'}`}>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-semibold text-white/80">{comment.userId.name}</span>
-                        {isAdmin && <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase tracking-widest font-bold">Admin</span>}
-                        <span className="text-xs text-white/40">{timeAgo(comment.createdAt)}</span>
+                        <span className="text-sm font-semibold text-white/80">{authorName}</span>
+                        {isAdminComment && <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase tracking-widest font-bold">Admin</span>}
+                        <span className="text-xs text-white/40">{timeAgo(commentTime)}</span>
                       </div>
                       
                       <div className={`p-4 rounded-2xl text-sm leading-relaxed ${
-                        isAdmin ? 'bg-amber-500/10 border border-amber-500/20 text-white/90 rounded-tl-none' :
+                        isAdminComment ? 'bg-amber-500/10 border border-amber-500/20 text-white/90 rounded-tl-none' :
                         isMe ? 'bg-indigo-500 text-white rounded-tr-none shadow-lg glow-brand' : 
                         'bg-white/5 border border-white/10 text-white/80 rounded-tl-none'
                       }`}>

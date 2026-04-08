@@ -12,7 +12,7 @@ const sendEmail = async ({ to, subject, html }) => {
   });
 
   await transporter.sendMail({
-    from: `"${process.env.FROM_NAME || 'SmartFlow'}" <${process.env.FROM_EMAIL || process.env.SMTP_EMAIL}>`,
+    from: `"${process.env.FROM_NAME || 'Shreyarth Resolve'}" <${process.env.FROM_EMAIL || process.env.SMTP_EMAIL}>`,
     to,
     subject,
     html

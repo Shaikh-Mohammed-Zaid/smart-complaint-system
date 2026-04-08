@@ -25,6 +25,7 @@ import MyComplaints from './pages/student/MyComplaints';
 import ComplaintDetail from './pages/student/ComplaintDetail';
 import StudentTrending from './pages/student/Trending';
 import Profile from './pages/student/Profile';
+import PublicComplaints from './pages/student/PublicComplaints';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -65,6 +66,7 @@ const AppRoutes = () => {
         <Route path="complaints" element={<MyComplaints />} />
         <Route path="trending" element={<StudentTrending />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="public-complaints" element={<PublicComplaints />} />
       </Route>
 
       {/* Shared Detail Route injected logically into correct layouts depending on origin, but mapped cleanly per role */}

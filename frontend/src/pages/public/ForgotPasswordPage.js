@@ -46,7 +46,7 @@ const ForgotPasswordPage = () => {
           </h1>
           <p className="text-white/60 text-lg max-w-md">Enter your email and we'll send you a secure link to reset your password.</p>
         </div>
-        <div className="text-white/30 text-sm">© SmartFlow 2026</div>
+        <div className="text-white/30 text-sm">© Shreyarth Resolve 2026</div>
       </div>
 
       <div className="flex items-center justify-center p-6 relative z-10">

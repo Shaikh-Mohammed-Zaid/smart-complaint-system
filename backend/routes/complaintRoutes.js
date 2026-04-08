@@ -11,8 +11,10 @@ const {
 } = require('../controllers/complaintController');
 const { protect, adminOnly } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const { getPublicComplaints } = require('../controllers/publicComplaintController');
 
-// Important order: /feed and /trending must precede /:id
+// Important order: /public, /feed and /trending must precede /:id
+router.get('/public', protect, getPublicComplaints);
 router.get('/feed', protect, getComplaintFeed);
 router.get('/trending', protect, getComplaintTrending);
 

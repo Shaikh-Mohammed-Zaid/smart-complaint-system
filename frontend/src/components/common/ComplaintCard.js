@@ -4,14 +4,15 @@ import { StatusBadge, PriorityBadge } from './Badges';
 import { getCategoryIcon, timeAgo, truncate } from '../../utils/helpers';
 
 export default function ComplaintCard({ complaint, linkPrefix = '/complaint', showActions, onVote, currentUserId }) {
+  const complaintId = complaint._id || complaint.id;
   const canVote = complaint.createdBy?._id !== currentUserId;
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden">
-      {complaint.image && (
+      {(complaint.imageUrl || complaint.image) && (
         <div className="h-40 overflow-hidden bg-gray-100">
           <img
-            src={`${process.env.REACT_APP_API_URL?.replace('/api', '') || ''}${complaint.image}`}
+            src={`${process.env.REACT_APP_API_URL?.replace('/api', '') || ''}${complaint.imageUrl || complaint.image}`}
             alt="Complaint"
             className="w-full h-full object-cover"
             onError={(e) => { e.target.style.display = 'none'; }}
@@ -24,7 +25,7 @@ export default function ComplaintCard({ complaint, linkPrefix = '/complaint', sh
             <span className="text-xl">{getCategoryIcon(complaint.category)}</span>
             <div className="min-w-0">
               <Link
-                to={`${linkPrefix}/${complaint._id}`}
+                to={`${linkPrefix}/${complaintId}`}
                 className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-sm leading-tight block truncate"
               >
                 {complaint.title}
@@ -50,13 +51,13 @@ export default function ComplaintCard({ complaint, linkPrefix = '/complaint', sh
         <div className="flex items-center justify-between pt-3 border-t border-gray-50">
           <div className="flex items-center gap-3">
             <PriorityBadge priority={complaint.priority} />
-            <span className="text-xs text-gray-400">{timeAgo(complaint.createdAt)}</span>
+            <span className="text-xs text-gray-400">{timeAgo(complaint.createdAt || complaint.created_at)}</span>
           </div>
 
           <div className="flex items-center gap-2">
             {onVote && canVote && (
               <button
-                onClick={() => onVote(complaint._id)}
+                onClick={() => onVote(complaintId)}
                 className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${
                   complaint.hasVoted
                     ? 'bg-blue-50 border-blue-200 text-blue-600'
@@ -78,7 +79,7 @@ export default function ComplaintCard({ complaint, linkPrefix = '/complaint', sh
               </div>
             )}
             <Link
-              to={`${linkPrefix}/${complaint._id}`}
+              to={`${linkPrefix}/${complaintId}`}
               className="text-xs text-blue-600 hover:text-blue-700 font-medium"
             >
               View →

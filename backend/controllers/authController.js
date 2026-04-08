@@ -182,7 +182,7 @@ const forgotPassword = async (req, res) => {
     <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0f0f1a; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
       <div style="padding: 40px 32px; text-align: center;">
         <h1 style="color: #ffffff; font-size: 24px; margin-bottom: 8px;">Password Reset Request</h1>
-        <p style="color: rgba(255,255,255,0.5); font-size: 14px; margin-bottom: 32px;">You requested a password reset for your SmartFlow account.</p>
+        <p style="color: rgba(255,255,255,0.5); font-size: 14px; margin-bottom: 32px;">You requested a password reset for your Shreyarth Resolve account.</p>
         <a href="${resetUrl}" style="display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">Reset Password</a>
         <p style="color: rgba(255,255,255,0.4); font-size: 12px; margin-top: 32px;">This link expires in 10 minutes. If you didn't request this, please ignore this email.</p>
       </div>
@@ -190,7 +190,7 @@ const forgotPassword = async (req, res) => {
   `;
 
   try {
-    await sendEmail({ to: user.email, subject: 'SmartFlow — Password Reset', html });
+    await sendEmail({ to: user.email, subject: 'Shreyarth Resolve — Password Reset', html });
     res.status(200).json({ success: true, message: 'Reset link sent to your email' });
   } catch (err) {
     await supabase.from('profiles').update({

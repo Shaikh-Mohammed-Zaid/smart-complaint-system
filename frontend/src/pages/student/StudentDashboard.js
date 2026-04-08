@@ -16,12 +16,17 @@ export default function StudentDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [analyticsRes, complaintsRes] = await Promise.all([
-          API.get('/analytics/student'),
-          API.get('/complaints?limit=3&sort=-createdAt'),
-        ]);
-        setAnalytics(analyticsRes.data.analytics);
-        setRecentComplaints(complaintsRes.data.complaints);
+        const { data } = await API.get('/analytics/student');
+        // Backend returns fields flat at root: { total, pending, inProgress, resolved, recentComplaints, ... }
+        setAnalytics({
+          total: data.total,
+          pending: data.pending,
+          inProgress: data.inProgress,
+          resolved: data.resolved,
+          categoryStats: data.categoryStats,
+          votesGiven: data.votesGiven,
+        });
+        setRecentComplaints(data.recentComplaints || []);
       } catch (err) {
         console.error(err);
       } finally {
@@ -119,7 +124,7 @@ export default function StudentDashboard() {
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {recentComplaints.map(c => <ComplaintCard key={c._id} complaint={c} />)}
+            {recentComplaints.map(c => <ComplaintCard key={c.id || c._id} complaint={c} />)}
           </div>
         )}
       </div>

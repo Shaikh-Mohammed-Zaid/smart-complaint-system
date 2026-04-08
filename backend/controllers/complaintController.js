@@ -149,7 +149,9 @@ exports.getComplaint = async (req, res) => {
 
   if (error || !complaint) return res.status(404).json({ success: false, message: 'Complaint not found' });
 
-  if (req.user.role === 'student' && complaint.created_by !== req.user.id) {
+  // Students can view any complaint that isn't Rejected (matches what the feed/trending shows them).
+  // Only block if they're trying to view a Rejected complaint that isn't their own.
+  if (req.user.role === 'student' && complaint.created_by !== req.user.id && complaint.status === 'Rejected') {
     return res.status(403).json({ success: false, message: 'Not authorized' });
   }
 

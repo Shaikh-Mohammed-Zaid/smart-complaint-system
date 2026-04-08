@@ -148,10 +148,10 @@ const ManageComplaints = () => {
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Moderate Complaint">
         <form onSubmit={handleUpdate} className="space-y-4">
-          {selectedComplaint?.image && (
+          {selectedComplaint?.imageUrl && (
             <div className="mb-4 rounded-xl overflow-hidden border border-white/10">
               <img 
-                src={selectedComplaint.image.startsWith('http') ? selectedComplaint.image : `${IMAGE_BASE}${selectedComplaint.image}`} 
+                src={selectedComplaint.imageUrl.startsWith('http') ? selectedComplaint.imageUrl : `${IMAGE_BASE}${selectedComplaint.imageUrl}`} 
                 alt="Complaint attachment" 
                 className="w-full h-48 object-cover" 
                 onError={(e) => { e.target.style.display = 'none'; }}

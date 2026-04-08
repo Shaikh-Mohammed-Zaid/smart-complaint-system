@@ -25,10 +25,10 @@ export default function AdminComplaintDetail() {
           API.get(`/complaints/${id}`),
           API.get(`/comments/${id}`),
         ]);
-        const c = cRes.data.complaint;
+        const c = cRes.data.data;
         setComplaint(c);
         setForm({ status: c.status, priority: c.priority, adminNote: c.adminNote || '' });
-        setComments(cmRes.data.comments);
+        setComments(cmRes.data.data || []);
       } catch {
         toast.error('Failed to load complaint');
         navigate('/admin/complaints');
@@ -44,7 +44,7 @@ export default function AdminComplaintDetail() {
     setUpdating(true);
     try {
       const { data } = await API.put(`/complaints/${id}`, form);
-      setComplaint(data.complaint);
+      setComplaint(data.data);
       toast.success('Complaint updated successfully');
     } catch {
       toast.error('Update failed');
@@ -58,7 +58,7 @@ export default function AdminComplaintDetail() {
     if (!newComment.trim()) return;
     try {
       const { data } = await API.post(`/comments/${id}`, { comment: newComment });
-      setComments(c => [...c, data.comment]);
+      setComments(c => [...c, data.data]);
       setNewComment('');
       toast.success('Comment added');
     } catch {
@@ -69,7 +69,7 @@ export default function AdminComplaintDetail() {
   const deleteComment = async (commentId) => {
     try {
       await API.delete(`/comments/${commentId}`);
-      setComments(c => c.filter(cm => cm._id !== commentId));
+      setComments(c => c.filter(cm => cm.id !== commentId));
     } catch {
       toast.error('Failed to delete');
     }
@@ -91,8 +91,8 @@ export default function AdminComplaintDetail() {
         {/* Left: Complaint info */}
         <div className="lg:col-span-2 space-y-5">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            {complaint.image && (
-              <img src={`${IMAGE_BASE}${complaint.image}`} alt="" className="w-full h-52 object-cover" onError={e => e.target.style.display='none'} />
+            {complaint.imageUrl && (
+              <img src={`${IMAGE_BASE}${complaint.imageUrl}`} alt="Complaint image" className="w-full h-52 object-cover" onError={e => e.target.style.display='none'} />
             )}
             <div className="p-6">
               <div className="flex items-start justify-between gap-3 mb-4">
@@ -136,19 +136,19 @@ export default function AdminComplaintDetail() {
             {comments.length > 0 && (
               <div className="space-y-3 mb-4">
                 {comments.map(c => (
-                  <div key={c._id} className={`flex gap-3 ${c.isAdminComment ? 'flex-row-reverse' : ''}`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${c.isAdminComment ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                      {c.userId?.name?.charAt(0) || '?'}
+                  <div key={c.id} className={`flex gap-3 ${c.is_admin_comment ? 'flex-row-reverse' : ''}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${c.is_admin_comment ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                      {c.profiles?.name?.charAt(0) || '?'}
                     </div>
-                    <div className={`flex-1 max-w-sm ${c.isAdminComment ? 'flex flex-col items-end' : ''}`}>
-                      <div className={`rounded-2xl px-4 py-2.5 text-sm ${c.isAdminComment ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-800'}`}>
+                    <div className={`flex-1 max-w-sm ${c.is_admin_comment ? 'flex flex-col items-end' : ''}`}>
+                      <div className={`rounded-2xl px-4 py-2.5 text-sm ${c.is_admin_comment ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-800'}`}>
                         {c.comment}
                       </div>
-                      <div className={`flex items-center gap-2 mt-1 text-xs text-gray-400 ${c.isAdminComment ? 'justify-end' : ''}`}>
-                        <span>{c.userId?.name}</span>
-                        {c.isAdminComment && <span className="text-indigo-400 font-medium">Admin</span>}
-                        <span>{timeAgo(c.createdAt)}</span>
-                        <button onClick={() => deleteComment(c._id)} className="text-red-400 hover:text-red-600">Delete</button>
+                      <div className={`flex items-center gap-2 mt-1 text-xs text-gray-400 ${c.is_admin_comment ? 'justify-end' : ''}`}>
+                        <span>{c.profiles?.name}</span>
+                        {c.is_admin_comment && <span className="text-indigo-400 font-medium">Admin</span>}
+                        <span>{timeAgo(c.created_at)}</span>
+                        <button onClick={() => deleteComment(c.id)} className="text-red-400 hover:text-red-600">Delete</button>
                       </div>
                     </div>
                   </div>

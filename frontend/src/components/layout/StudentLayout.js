@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Home, List, TrendingUp, LogOut, Menu, X, User } from 'lucide-react';
+import { Home, List, TrendingUp, LogOut, Menu, X, User, Globe } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import NotificationBell from '../common/NotificationBell';
 import ParticleBackground from '../three/ParticleBackground';
@@ -17,10 +17,11 @@ const StudentLayout = () => {
   };
 
   const navItems = [
-    { path: '/student/dashboard', icon: Home, label: 'Dashboard' },
-    { path: '/student/complaints', icon: List, label: 'My Complaints' },
-    { path: '/student/trending', icon: TrendingUp, label: 'Trending Log' },
-    { path: '/student/profile', icon: User, label: 'Profile' },
+    { path: '/student/dashboard',           icon: Home,        label: 'Dashboard' },
+    { path: '/student/public-complaints',   icon: Globe,       label: 'All Complaints' },
+    { path: '/student/complaints',          icon: List,        label: 'My Complaints' },
+    { path: '/student/trending',            icon: TrendingUp,  label: 'Trending Log' },
+    { path: '/student/profile',             icon: User,        label: 'Profile' },
   ];
 
   return (
@@ -47,7 +48,7 @@ const StudentLayout = () => {
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-400 flex items-center justify-center font-bold text-lg shadow-lg">
               S
             </div>
-            <h1 className="font-display font-bold text-xl tracking-tight">SmartFlow</h1>
+            <h1 className="font-display font-bold text-xl tracking-tight">Shreyarth Resolve</h1>
           </div>
           <button className="lg:hidden text-white/50 hover:text-white" onClick={() => setSidebarOpen(false)}>
             <X size={24} />
