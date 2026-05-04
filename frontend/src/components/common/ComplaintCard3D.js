@@ -4,10 +4,17 @@ import { ThumbsUp, MessageSquare, TrendingUp, Clock } from 'lucide-react';
 import { getInitials, timeAgo, getCategoryEmoji, getImageUrl } from '../../utils/helpers';
 import { StatusBadge, PriorityBadge } from './Badges';
 import { Link } from 'react-router-dom';
+import { useTrendingScore } from '../../hooks/useTrendingScore';
 
 const ComplaintCard3D = ({ complaint, onVote, isTrending = false, rank = 0 }) => {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
+
+  // Compute trend score live from votes + age so it's never stale (DB value starts at 0)
+  const liveTrendScore = useTrendingScore(
+    complaint.votes || 0,
+    complaint.createdAt || complaint.created_at
+  );
 
   const rotateX = useTransform(y, [-100, 100], [10, -10]);
   const rotateY = useTransform(x, [-100, 100], [-10, 10]);
@@ -111,9 +118,9 @@ const ComplaintCard3D = ({ complaint, onVote, isTrending = false, rank = 0 }) =>
                 {isTrending ? (
                   <div className="flex flex-col items-end">
                     <span className="text-xs text-white/50 mb-0.5">Trend Score</span>
-                    <span className="flex items-center text-sm font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded">
+                    <span className="flex items-center text-sm font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded">
                       <TrendingUp size={14} className="mr-1" />
-                      {complaint.trendingScore?.toFixed(1) || 0}
+                      ↑ {Math.min(100, Math.round((liveTrendScore / 17.68) * 100))}%
                     </span>
                   </div>
                 ) : (
